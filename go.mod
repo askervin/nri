@@ -15,6 +15,8 @@ require (
 	github.com/sirupsen/logrus v1.7.0
 	golang.org/x/sys v0.0.0-20210511113859-b0526f3d8744
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
+	k8s.io/apimachinery v0.20.6
+	k8s.io/client-go v0.20.6
 	sigs.k8s.io/yaml v1.2.0
 )
 

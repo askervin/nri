@@ -25,7 +25,7 @@ TTRPC_COMPILE = protoc $(TTRPC_OPTIONS)
 GO_CMD   := go
 GO_BUILD := $(GO_CMD) build
 
-PLUGINS := bin/logger
+PLUGINS := bin/logger bin/podresources
 
 all: build
 
@@ -42,6 +42,10 @@ binaries: $(PLUGINS)
 	$(TTRPC_COMPILE) -I$(dir $<) --gogottrpc_out=plugins=ttrpc:$(dir $<) $<
 
 bin/logger: $(wildcard v2alpha1/plugins/logger/*.go)
+	@echo "Building $@..."; \
+	$(GO_BUILD) -o $@ ./$(dir $<)
+
+bin/podresources: $(wildcard v2alpha1/plugins/podresources/*.go)
 	@echo "Building $@..."; \
 	$(GO_BUILD) -o $@ ./$(dir $<)
 
