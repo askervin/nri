@@ -118,6 +118,7 @@ func (g *Generator) Adjust(adjust *nri.ContainerAdjustment) error {
 	g.AdjustDevices(adjust.GetLinux().GetDevices())
 	g.AdjustCgroupsPath(adjust.GetLinux().GetCgroupsPath())
 	g.AdjustOomScoreAdj(adjust.GetLinux().GetOomScoreAdj())
+	g.AdjustMemoryPolicy(adjust.GetLinux().GetMemoryPolicy())
 
 	resources := adjust.GetLinux().GetResources()
 	if err := g.AdjustResources(resources); err != nil {
@@ -340,6 +341,13 @@ func (g *Generator) AdjustOomScoreAdj(score *nri.OptionalInt) {
 	}
 }
 
+// AdjustMemoryPolicy adjusts default memory policy (set_mempolicy) for the container.
+func (g *Generator) AdjustMemoryPolicy(memoryPolicy *nri.LinuxMemoryPolicy) {
+	if memoryPolicy != nil {
+		g.SetLinuxMemoryPolicy(memoryPolicy.ToOCI())
+	}
+}
+
 // AdjustDevices adjusts the (Linux) devices in the OCI Spec.
 func (g *Generator) AdjustDevices(devices []*nri.LinuxDevice) {
 	for _, d := range devices {
@@ -525,6 +533,14 @@ func (g *Generator) ClearLinuxResourcesBlockIO() {
 func (g *Generator) SetLinuxResourcesBlockIO(blockIO *rspec.LinuxBlockIO) {
 	g.initConfigLinuxResources()
 	g.Config.Linux.Resources.BlockIO = blockIO
+}
+
+func (g *Generator) SetLinuxMemoryPolicy(mpol *rspec.LinuxMemoryPolicy) {
+	g.initConfigLinux()
+	if mpol != nil && mpol.Mode == "" {
+		mpol = nil
+	}
+	g.Config.Linux.MemoryPolicy = mpol
 }
 
 func (g *Generator) initConfig() {

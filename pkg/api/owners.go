@@ -157,6 +157,10 @@ func (o *OwningPlugins) ClaimRlimit(id, typ, plugin string) error {
 	return o.OwnersFor(id).ClaimRlimit(typ, plugin)
 }
 
+func (o *OwningPlugins) ClaimMemoryPolicy(id, plugin string) error {
+	return o.OwnersFor(id).ClaimMemoryPolicy(plugin)
+}
+
 func (o *OwningPlugins) ClearAnnotation(id, key, plugin string) {
 	o.OwnersFor(id).ClearAnnotation(key, plugin)
 }
@@ -291,6 +295,10 @@ func (o *OwningPlugins) OomScoreAdjOwner(id string) (string, bool) {
 
 func (o *OwningPlugins) RlimitOwner(id, typ string) (string, bool) {
 	return o.OwnersFor(id).compoundOwner(Field_Rlimits.Key(), typ)
+}
+
+func (o *OwningPlugins) MemoryPolicy(id string) (string, bool) {
+	return o.OwnersFor(id).simpleOwner(Field_MemoryPolicy.Key())
 }
 
 func (o *OwningPlugins) OwnersFor(id string) *FieldOwners {
@@ -495,6 +503,10 @@ func (f *FieldOwners) ClaimRlimit(typ, plugin string) error {
 	return f.claimCompound(Field_Rlimits.Key(), typ, plugin)
 }
 
+func (f *FieldOwners) ClaimMemoryPolicy(plugin string) error {
+	return f.claimSimple(Field_MemoryPolicy.Key(), plugin)
+}
+
 func (f *FieldOwners) clearCompound(field int32, key, plugin string) {
 	m, ok := f.Compound[field]
 	if !ok {
@@ -667,6 +679,10 @@ func (f *FieldOwners) OomScoreAdjOwner() (string, bool) {
 
 func (f *FieldOwners) RlimitOwner(typ string) (string, bool) {
 	return f.compoundOwner(Field_Rlimits.Key(), typ)
+}
+
+func (f *FieldOwners) MemoryPolicyOwner() (string, bool) {
+	return f.simpleOwner(Field_MemoryPolicy.Key())
 }
 
 func qualify(field int32, qualifiers ...string) string {

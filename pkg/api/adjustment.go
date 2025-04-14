@@ -147,6 +147,13 @@ func (a *ContainerAdjustment) AddCDIDevice(d *CDIDevice) {
 	a.CDIDevices = append(a.CDIDevices, d) // TODO: should we dup d here ?
 }
 
+func (a *ContainerAdjustment) SetLinuxMemoryPolicy(mode MpolMode, nodes string, flags ...MpolFlag) {
+	a.initLinuxMemoryPolicy()
+	a.Linux.MemoryPolicy.Mode = mode
+	a.Linux.MemoryPolicy.Nodes = nodes
+	a.Linux.MemoryPolicy.Flags = slices.Clone(flags)
+}
+
 // SetLinuxMemoryLimit records setting the memory limit for a container.
 func (a *ContainerAdjustment) SetLinuxMemoryLimit(value int64) {
 	a.initLinuxResourcesMemory()
@@ -308,6 +315,13 @@ func (a *ContainerAdjustment) initRlimits() {
 func (a *ContainerAdjustment) initLinux() {
 	if a.Linux == nil {
 		a.Linux = &LinuxContainerAdjustment{}
+	}
+}
+
+func (a *ContainerAdjustment) initLinuxMemoryPolicy() {
+	a.initLinux()
+	if a.Linux.MemoryPolicy == nil {
+		a.Linux.MemoryPolicy = &LinuxMemoryPolicy{}
 	}
 }
 
