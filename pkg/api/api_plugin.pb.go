@@ -1,4 +1,4 @@
-//go:build wasip1
+//go:build tinygo.wasm
 
 //
 //Copyright The containerd Authors.
@@ -31,7 +31,7 @@ import (
 
 const PluginPluginAPIVersion = 1
 
-//go:wasmexport plugin_api_version
+//export plugin_api_version
 func _plugin_api_version() uint64 {
 	return PluginPluginAPIVersion
 }
@@ -42,7 +42,7 @@ func RegisterPlugin(p Plugin) {
 	plugin = p
 }
 
-//go:wasmexport plugin_configure
+//export plugin_configure
 func _plugin_configure(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(ConfigureRequest)
@@ -66,7 +66,7 @@ func _plugin_configure(ptr, size uint32) uint64 {
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
-//go:wasmexport plugin_synchronize
+//export plugin_synchronize
 func _plugin_synchronize(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(SynchronizeRequest)
@@ -90,7 +90,7 @@ func _plugin_synchronize(ptr, size uint32) uint64 {
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
-//go:wasmexport plugin_shutdown
+//export plugin_shutdown
 func _plugin_shutdown(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(Empty)
@@ -114,7 +114,7 @@ func _plugin_shutdown(ptr, size uint32) uint64 {
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
-//go:wasmexport plugin_create_container
+//export plugin_create_container
 func _plugin_create_container(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(CreateContainerRequest)
@@ -138,7 +138,7 @@ func _plugin_create_container(ptr, size uint32) uint64 {
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
-//go:wasmexport plugin_update_container
+//export plugin_update_container
 func _plugin_update_container(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(UpdateContainerRequest)
@@ -162,7 +162,7 @@ func _plugin_update_container(ptr, size uint32) uint64 {
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
-//go:wasmexport plugin_stop_container
+//export plugin_stop_container
 func _plugin_stop_container(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(StopContainerRequest)
@@ -186,7 +186,7 @@ func _plugin_stop_container(ptr, size uint32) uint64 {
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
-//go:wasmexport plugin_update_pod_sandbox
+//export plugin_update_pod_sandbox
 func _plugin_update_pod_sandbox(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(UpdatePodSandboxRequest)
@@ -210,7 +210,7 @@ func _plugin_update_pod_sandbox(ptr, size uint32) uint64 {
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
-//go:wasmexport plugin_state_change
+//export plugin_state_change
 func _plugin_state_change(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(StateChangeEvent)
@@ -234,7 +234,7 @@ func _plugin_state_change(ptr, size uint32) uint64 {
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
-//go:wasmexport plugin_validate_container_adjustment
+//export plugin_validate_container_adjustment
 func _plugin_validate_container_adjustment(ptr, size uint32) uint64 {
 	b := wasm.PtrToByte(ptr, size)
 	req := new(ValidateContainerAdjustmentRequest)
@@ -274,7 +274,7 @@ func (h hostFunctions) Log(ctx context.Context, request *LogRequest) (*Empty, er
 	}
 	ptr, size := wasm.ByteToPtr(buf)
 	ptrSize := _log(ptr, size)
-	wasm.Free(ptr)
+	wasm.FreePtr(ptr)
 
 	ptr = uint32(ptrSize >> 32)
 	size = uint32(ptrSize)

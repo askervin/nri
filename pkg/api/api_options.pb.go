@@ -1,4 +1,4 @@
-//go:build !wasip1
+//go:build !tinygo.wasm
 
 //
 //Copyright The containerd Authors.
