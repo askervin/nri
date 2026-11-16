@@ -1,0 +1,525 @@
+diff --git a/pkg/adaptation/adaptation.go b/pkg/adaptation/adaptation.go
+index be5a320..f79fa53 100644
+--- a/pkg/adaptation/adaptation.go
++++ b/pkg/adaptation/adaptation.go
+@@ -57,7 +57,10 @@ type UpdateFn func(context.Context, []*ContainerUpdate) ([]*ContainerUpdate, err
+ 
+ // Adaptation is the NRI abstraction for container runtime NRI adaptation/integration.
+ type Adaptation struct {
+-	sync.Mutex
++	// Held for writing while the plugin list changes, for reading by every
++	// request. The order requests are relayed and applied in is order's job.
++	sync.RWMutex
++	order       order
+ 	name        string
+ 	version     string
+ 	nriVersion  string
+@@ -241,105 +244,105 @@ func (r *Adaptation) Stop() {
+ 	r.stopPlugins()
+ }
+ 
+-// RunPodSandbox relays the corresponding CRI request to plugins.
+-func (r *Adaptation) RunPodSandbox(ctx context.Context, req *RunPodSandboxRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
++// relay calls fn for every live plugin in index order, each call in this
++// request's turn at that plugin.
++func (r *Adaptation) relay(ctx context.Context, t *turn, fn func(*plugin) error) error {
++	for _, p := range r.plugins {
++		if p.isClosed() {
+ 			continue
+ 		}
+-		if _, err := plugin.runPodSandbox(ctx, req); err != nil {
++		if err := t.wait(ctx, p); err != nil {
++			return err
++		}
++		err := fn(p)
++		t.done(p)
++		if err != nil {
+ 			return err
+ 		}
+ 	}
+-
+ 	return nil
+ }
+ 
++// notify relays a request that cannot be answered with container changes.
++func (r *Adaptation) notify(ctx context.Context, event Event, fn func(*plugin) error) error {
++	defer r.removeClosed()
++
++	r.RLock()
++	defer r.RUnlock()
++
++	t := r.order.enter(r.plugins, event, false)
++	defer t.release()
++
++	return r.relay(ctx, t, fn)
++}
++
++// RunPodSandbox relays the corresponding CRI request to plugins.
++func (r *Adaptation) RunPodSandbox(ctx context.Context, req *RunPodSandboxRequest) error {
++	return r.notify(ctx, Event_RUN_POD_SANDBOX, func(p *plugin) error {
++		_, err := p.runPodSandbox(ctx, req)
++		return err
++	})
++}
++
+ // UpdatePodSandbox relays the corresponding CRI request to plugins.
+ func (r *Adaptation) UpdatePodSandbox(ctx context.Context, req *UpdatePodSandboxRequest) (*UpdatePodSandboxResponse, error) {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.updatePodSandbox(ctx, req)
+-		if err != nil {
+-			return nil, err
+-		}
++	err := r.notify(ctx, Event_UPDATE_POD_SANDBOX, func(p *plugin) error {
++		_, err := p.updatePodSandbox(ctx, req)
++		return err
++	})
++	if err != nil {
++		return nil, err
+ 	}
+-
+ 	return &UpdatePodSandboxResponse{}, nil
+ }
+ 
+ // PostUpdatePodSandbox relays the corresponding CRI request to plugins.
+ func (r *Adaptation) PostUpdatePodSandbox(ctx context.Context, req *PostUpdatePodSandboxRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.postUpdatePodSandbox(ctx, req)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	return r.notify(ctx, Event_POST_UPDATE_POD_SANDBOX, func(p *plugin) error {
++		_, err := p.postUpdatePodSandbox(ctx, req)
++		return err
++	})
+ }
+ 
+ // StopPodSandbox relays the corresponding CRI request to plugins.
+ func (r *Adaptation) StopPodSandbox(ctx context.Context, req *StopPodSandboxRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.stopPodSandbox(ctx, req)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	return r.notify(ctx, Event_STOP_POD_SANDBOX, func(p *plugin) error {
++		_, err := p.stopPodSandbox(ctx, req)
++		return err
++	})
+ }
+ 
+ // RemovePodSandbox relays the corresponding CRI request to plugins.
+ func (r *Adaptation) RemovePodSandbox(ctx context.Context, req *RemovePodSandboxRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.removePodSandbox(ctx, req)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	return r.notify(ctx, Event_REMOVE_POD_SANDBOX, func(p *plugin) error {
++		_, err := p.removePodSandbox(ctx, req)
++		return err
++	})
+ }
+ 
+-// CreateContainer relays the corresponding CRI request to plugins.
++// CreateContainer relays the corresponding CRI request to plugins and
++// returns the answer in arrival order (see CreateContainerAndApply).
+ func (r *Adaptation) CreateContainer(ctx context.Context, req *CreateContainerRequest) (*CreateContainerResponse, error) {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
++	var rpl *CreateContainerResponse
++	err := r.CreateContainerAndApply(ctx, req, func(x *CreateContainerResponse) error {
++		rpl = x
++		return nil
++	})
++	return rpl, err
++}
++
++// CreateContainerAndApply relays the request to plugins and calls apply
++// with the answer, in the order the requests arrived. Only the apply waits
++// for earlier requests; plugins are called as soon as it is this request's
++// turn at each of them.
++func (r *Adaptation) CreateContainerAndApply(ctx context.Context, req *CreateContainerRequest, apply func(*CreateContainerResponse) error) error {
++	defer r.removeClosed()
++
++	r.RLock()
++	defer r.RUnlock()
++
++	t := r.order.enter(r.plugins, Event_CREATE_CONTAINER, true)
++	defer t.release()
+ 
+ 	var (
+ 		result   = collectCreateContainerResult(req)
+@@ -353,167 +356,147 @@ func (r *Adaptation) CreateContainer(ctx context.Context, req *CreateContainerRe
+ 		}
+ 	}
+ 
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
++	err := r.relay(ctx, t, func(plugin *plugin) error {
+ 		if validate != nil {
+ 			validate.AddPlugin(plugin.base, plugin.idx)
+ 		}
+ 		rpl, err := plugin.createContainer(ctx, req)
+ 		if err != nil {
+-			return nil, err
+-		}
+-		err = result.apply(rpl, plugin.name())
+-		if err != nil {
+-			return nil, err
++			return err
+ 		}
++		return result.apply(rpl, plugin.name())
++	})
++	if err != nil {
++		return err
++	}
++
++	rpl, err := r.validateContainerAdjustment(ctx, validate, result)
++	if err != nil {
++		return err
+ 	}
+ 
+-	return r.validateContainerAdjustment(ctx, validate, result)
++	if err := t.waitApply(ctx); err != nil {
++		return err
++	}
++	return apply(rpl)
+ }
+ 
+ // PostCreateContainer relays the corresponding CRI request to plugins.
+ func (r *Adaptation) PostCreateContainer(ctx context.Context, req *PostCreateContainerRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.postCreateContainer(ctx, req)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	return r.notify(ctx, Event_POST_CREATE_CONTAINER, func(p *plugin) error {
++		_, err := p.postCreateContainer(ctx, req)
++		return err
++	})
+ }
+ 
+ // StartContainer relays the corresponding CRI request to plugins.
+ func (r *Adaptation) StartContainer(ctx context.Context, req *StartContainerRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.startContainer(ctx, req)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	return r.notify(ctx, Event_START_CONTAINER, func(p *plugin) error {
++		_, err := p.startContainer(ctx, req)
++		return err
++	})
+ }
+ 
+ // PostStartContainer relays the corresponding CRI request to plugins.
+ func (r *Adaptation) PostStartContainer(ctx context.Context, req *PostStartContainerRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.postStartContainer(ctx, req)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	return r.notify(ctx, Event_POST_START_CONTAINER, func(p *plugin) error {
++		_, err := p.postStartContainer(ctx, req)
++		return err
++	})
+ }
+ 
+ // UpdateContainer relays the corresponding CRI request to plugins.
+ func (r *Adaptation) UpdateContainer(ctx context.Context, req *UpdateContainerRequest) (*UpdateContainerResponse, error) {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
++	var rpl *UpdateContainerResponse
++	err := r.UpdateContainerAndApply(ctx, req, func(x *UpdateContainerResponse) error {
++		rpl = x
++		return nil
++	})
++	return rpl, err
++}
++
++// UpdateContainerAndApply relays the request to plugins and calls apply
++// with the answer, in the order the requests arrived.
++func (r *Adaptation) UpdateContainerAndApply(ctx context.Context, req *UpdateContainerRequest, apply func(*UpdateContainerResponse) error) error {
++	defer r.removeClosed()
++
++	r.RLock()
++	defer r.RUnlock()
++
++	t := r.order.enter(r.plugins, Event_UPDATE_CONTAINER, true)
++	defer t.release()
+ 
+ 	result := collectUpdateContainerResult(req)
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
++	err := r.relay(ctx, t, func(plugin *plugin) error {
+ 		rpl, err := plugin.updateContainer(ctx, req)
+ 		if err != nil {
+-			return nil, err
+-		}
+-		err = result.apply(rpl, plugin.name())
+-		if err != nil {
+-			return nil, err
++			return err
+ 		}
++		return result.apply(rpl, plugin.name())
++	})
++	if err != nil {
++		return err
+ 	}
+ 
+-	return result.updateContainerResponse(), nil
++	if err := t.waitApply(ctx); err != nil {
++		return err
++	}
++	return apply(result.updateContainerResponse())
+ }
+ 
+ // PostUpdateContainer relays the corresponding CRI request to plugins.
+ func (r *Adaptation) PostUpdateContainer(ctx context.Context, req *PostUpdateContainerRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.postUpdateContainer(ctx, req)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	return r.notify(ctx, Event_POST_UPDATE_CONTAINER, func(p *plugin) error {
++		_, err := p.postUpdateContainer(ctx, req)
++		return err
++	})
+ }
+ 
+ // StopContainer relays the corresponding CRI request to plugins.
+ func (r *Adaptation) StopContainer(ctx context.Context, req *StopContainerRequest) (*StopContainerResponse, error) {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
++	var rpl *StopContainerResponse
++	err := r.StopContainerAndApply(ctx, req, func(x *StopContainerResponse) error {
++		rpl = x
++		return nil
++	})
++	return rpl, err
++}
++
++// StopContainerAndApply relays the request to plugins and calls apply with
++// the answer, in the order the requests arrived.
++func (r *Adaptation) StopContainerAndApply(ctx context.Context, req *StopContainerRequest, apply func(*StopContainerResponse) error) error {
++	defer r.removeClosed()
++
++	r.RLock()
++	defer r.RUnlock()
++
++	t := r.order.enter(r.plugins, Event_STOP_CONTAINER, true)
++	defer t.release()
+ 
+ 	result := collectStopContainerResult()
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
++	err := r.relay(ctx, t, func(plugin *plugin) error {
+ 		rpl, err := plugin.stopContainer(ctx, req)
+ 		if err != nil {
+-			return nil, err
+-		}
+-		err = result.apply(rpl, plugin.name())
+-		if err != nil {
+-			return nil, err
++			return err
+ 		}
++		return result.apply(rpl, plugin.name())
++	})
++	if err != nil {
++		return err
+ 	}
+ 
+-	return result.stopContainerResponse(), nil
++	if err := t.waitApply(ctx); err != nil {
++		return err
++	}
++	return apply(result.stopContainerResponse())
+ }
+ 
+ // RemoveContainer relays the corresponding CRI request to plugins.
+ func (r *Adaptation) RemoveContainer(ctx context.Context, req *RemoveContainerRequest) error {
+-	r.Lock()
+-	defer r.Unlock()
+-	defer r.removeClosedPlugins()
+-
+-	for _, plugin := range r.plugins {
+-		if plugin.isClosed() {
+-			continue
+-		}
+-		_, err := plugin.removeContainer(ctx, req)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	return r.notify(ctx, Event_REMOVE_CONTAINER, func(p *plugin) error {
++		_, err := p.removeContainer(ctx, req)
++		return err
++	})
+ }
+ 
+ // Perform a set of unsolicited container updates requested by a plugin.
+@@ -647,6 +630,26 @@ func (r *Adaptation) stopPlugins() {
+ 	r.plugins = nil
+ }
+ 
++// removeClosed drops plugins that closed while a request was running. The
++// write lock is taken only when there is something to drop.
++func (r *Adaptation) removeClosed() {
++	r.RLock()
++	closed := false
++	for _, p := range r.plugins {
++		if p.isClosed() {
++			closed = true
++			break
++		}
++	}
++	r.RUnlock()
++	if !closed {
++		return
++	}
++	r.Lock()
++	defer r.Unlock()
++	r.removeClosedPlugins()
++}
++
+ // removeClosedPlugins removes closed plugins from the registry. The caller
+ // must hold the lock. A plugin is closed when a request drops it, or when
+ // its connection closes while no request is in progress. It is removed at
+@@ -667,6 +670,9 @@ func (r *Adaptation) removeClosedPlugins() {
+ 	}
+ 
+ 	if len(closed) != 0 {
++		for _, p := range closed {
++			r.order.forget(p)
++		}
+ 		go func() {
+ 			for _, plugin := range closed {
+ 				plugin.stop()
+diff --git a/pkg/adaptation/plugin.go b/pkg/adaptation/plugin.go
+index 2a66910..136d3ec 100644
+--- a/pkg/adaptation/plugin.go
++++ b/pkg/adaptation/plugin.go
+@@ -65,10 +65,15 @@ type plugin struct {
+ 	events EventMask
+ 	policy *FailurePolicy
+ 	closed bool
+-	regC   chan error
+-	closeC chan struct{}
+-	r      *Adaptation
+-	impl   *pluginType
++	// parallel says the plugin handles events in parallel and takes no turn
++	// (prototype: from NRI_EXP_PARALLEL_PLUGINS; for real from the
++	// configure reply). serial is the per-plugin mutex of the "mutex" mode.
++	parallel bool
++	serial   sync.Mutex
++	regC     chan error
++	closeC   chan struct{}
++	r        *Adaptation
++	impl     *pluginType
+ }
+ 
+ // SetPluginRegistrationTimeout sets the timeout for plugin registration.
+@@ -497,6 +502,10 @@ func (p *plugin) configure(ctx context.Context, name, version, config string) (e
+ 		events = ValidEvents
+ 	}
+ 	p.events = events
++	p.parallel = expParallel(p.name())
++	if p.parallel {
++		log.Infof(ctx, "plugin %q handles its events in parallel", p.name())
++	}
+ 
+ 	// A nil policy means all defaults. The proto getters accept a nil receiver.
+ 	p.policy = rpl.FailurePolicy

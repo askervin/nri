@@ -1,0 +1,40 @@
+### prototype global: lifecycle, timeout, cancel
+    exp_parallel_test.go:387: mode=baseline: plugin0 10ms on Create/Stop else 0; plugin1 1ms on all 9 events
+    exp_parallel_test.go:388:    N         up       down serial-model
+    exp_parallel_test.go:424:    8      122ms      118ms  120ms/112ms
+    exp_parallel_test.go:424:   32      475ms      460ms  480ms/448ms
+    exp_parallel_test.go:424:   64      936ms      920ms  960ms/896ms
+--- PASS: TestExpLifecycleBurst (3.04s)
+    exp_parallel_test.go:561: mode=baseline: 50 creates x 10ms through 1 plugin with a 200ms request timeout took 524ms, 0 failed
+--- PASS: TestExpBurstDoesNotExpireQueuedRequests (0.53s)
+    exp_parallel_test.go:593: mode=baseline: B (5ms deadline, queued behind a 100ms request) returned after 5ms with err=context deadline exceeded; C after 101ms with err=<nil>
+--- PASS: TestExpCancelledWaiter (0.12s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	3.715s
+### prototype parallel=exp1 (adjuster-like plugin only): lifecycle
+    exp_parallel_test.go:387: mode=baseline: plugin0 10ms on Create/Stop else 0; plugin1 1ms on all 9 events
+    exp_parallel_test.go:388:    N         up       down serial-model
+    exp_parallel_test.go:424:    8       94ms       91ms  120ms/112ms
+    exp_parallel_test.go:424:   32      371ms      352ms  480ms/448ms
+    exp_parallel_test.go:424:   64      730ms      708ms  960ms/896ms
+--- PASS: TestExpLifecycleBurst (2.35s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	2.387s
+### prototype mutex: lifecycle
+    exp_parallel_test.go:387: mode=mutex: plugin0 10ms on Create/Stop else 0; plugin1 1ms on all 9 events
+    exp_parallel_test.go:388:    N         up       down serial-model
+    exp_parallel_test.go:424:    8      120ms      118ms  120ms/112ms
+    exp_parallel_test.go:424:   32      467ms      460ms  480ms/448ms
+    exp_parallel_test.go:424:   64      933ms      911ms  960ms/896ms
+--- PASS: TestExpLifecycleBurst (3.02s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	3.044s
+### baseline main: timeout, cancel
+    exp_parallel_test.go:561: mode=baseline: 50 creates x 10ms through 1 plugin with a 200ms request timeout took 525ms, 0 failed
+--- PASS: TestExpBurstDoesNotExpireQueuedRequests (0.53s)
+time="2026-11-15T11:14:27+02:00" level=error msg="ttrpc: received message on inactive stream" stream=7
+    exp_parallel_test.go:593: mode=baseline: B (5ms deadline, queued behind a 100ms request) returned after 91ms with err=context deadline exceeded; C after 101ms with err=<nil>
+--- PASS: TestExpCancelledWaiter (0.20s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	0.763s
+### DONE

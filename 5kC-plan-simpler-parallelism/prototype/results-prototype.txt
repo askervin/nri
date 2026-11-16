@@ -1,0 +1,125 @@
+### global (default)
+    exp_parallel_test.go:326: mode=baseline, plugin delay 10ms per CreateContainer
+    exp_parallel_test.go:327:    N    P      total      N*P*d  (N+P-1)*d  overlap
+    exp_parallel_test.go:340:    1    1       11ms       10ms       10ms        0
+    exp_parallel_test.go:340:    8    1       83ms       80ms       80ms        0
+    exp_parallel_test.go:340:   32    1      335ms      320ms      320ms        0
+    exp_parallel_test.go:340:  128    1     1.344s      1.28s      1.28s        0
+    exp_parallel_test.go:340:    1    2       21ms       20ms       20ms        0
+    exp_parallel_test.go:340:    8    2       94ms      160ms       90ms        0
+    exp_parallel_test.go:340:   32    2      345ms      640ms      330ms        0
+    exp_parallel_test.go:340:  128    2     1.352s      2.56s      1.29s        0
+    exp_parallel_test.go:340:    1    4       42ms       40ms       40ms        0
+    exp_parallel_test.go:340:    8    4      115ms      320ms      110ms        0
+    exp_parallel_test.go:340:   32    4      369ms      1.28s      350ms        0
+    exp_parallel_test.go:340:  128    4     1.382s      5.12s      1.31s        0
+--- PASS: TestExpCreateMatrix (5.52s)
+    exp_parallel_test.go:351: mode=baseline, plugin delay 0
+    exp_parallel_test.go:352:    N    P      total per req*plugin
+    exp_parallel_test.go:361:    1    1      200µs        242µs
+    exp_parallel_test.go:361:   32    1      4.7ms        148µs
+    exp_parallel_test.go:361:  128    1     19.1ms        149µs
+    exp_parallel_test.go:361:    1    4      600µs        144µs
+    exp_parallel_test.go:361:   32    4     12.8ms        100µs
+    exp_parallel_test.go:361:  128    4     32.8ms         64µs
+--- PASS: TestExpOverhead (0.08s)
+    exp_parallel_test.go:387: mode=baseline: plugin0 10ms on Create/Stop else 0; plugin1 1ms on all 9 events
+    exp_parallel_test.go:388:    N         up       down serial-model
+    exp_parallel_test.go:424:    8      120ms      117ms  120ms/112ms
+    exp_parallel_test.go:424:   32      471ms      465ms  480ms/448ms
+    exp_parallel_test.go:424:   64      935ms      920ms  960ms/896ms
+--- PASS: TestExpLifecycleBurst (3.03s)
+    exp_parallel_test.go:487: mode=baseline plugin exp0: saw 26 requests, 0 order inversions against answer order, overlap 0
+    exp_parallel_test.go:487: mode=baseline plugin exp1: saw 64 requests, 0 order inversions against answer order, overlap 0
+--- PASS: TestExpOrderInversions (0.16s)
+    exp_parallel_test.go:532: mode=baseline: per-container lifecycle order held for 32 containers on 2 plugins
+--- PASS: TestExpSameContainerOrder (0.17s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	8.988s
+### mutex
+    exp_parallel_test.go:326: mode=mutex, plugin delay 10ms per CreateContainer
+    exp_parallel_test.go:327:    N    P      total      N*P*d  (N+P-1)*d  overlap
+    exp_parallel_test.go:340:    1    1       11ms       10ms       10ms        0
+    exp_parallel_test.go:340:    8    1       83ms       80ms       80ms        0
+    exp_parallel_test.go:340:   32    1      335ms      320ms      320ms        0
+    exp_parallel_test.go:340:  128    1     1.342s      1.28s      1.28s        0
+    exp_parallel_test.go:340:    1    2       21ms       20ms       20ms        0
+    exp_parallel_test.go:340:    8    2       94ms      160ms       90ms        0
+    exp_parallel_test.go:340:   32    2      345ms      640ms      330ms        0
+    exp_parallel_test.go:340:  128    2      1.37s      2.56s      1.29s        0
+    exp_parallel_test.go:340:    1    4       42ms       40ms       40ms        0
+    exp_parallel_test.go:340:    8    4      116ms      320ms      110ms        0
+    exp_parallel_test.go:340:   32    4      369ms      1.28s      350ms        0
+    exp_parallel_test.go:340:  128    4     1.377s      5.12s      1.31s        0
+--- PASS: TestExpCreateMatrix (5.53s)
+    exp_parallel_test.go:487: mode=mutex plugin exp0: saw 26 requests, 0 order inversions against answer order, overlap 0
+    exp_parallel_test.go:487: mode=mutex plugin exp1: saw 64 requests, 30 order inversions against answer order, overlap 0
+--- PASS: TestExpOrderInversions (0.15s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	5.722s
+### none
+    exp_parallel_test.go:326: mode=none, plugin delay 10ms per CreateContainer
+    exp_parallel_test.go:327:    N    P      total      N*P*d  (N+P-1)*d  overlap
+    exp_parallel_test.go:340:    1    1       11ms       10ms       10ms        0
+    exp_parallel_test.go:340:    8    1       11ms       80ms       80ms        7
+    exp_parallel_test.go:340:   32    1       15ms      320ms      320ms       31
+    exp_parallel_test.go:340:  128    1       14ms      1.28s      1.28s      127
+    exp_parallel_test.go:340:    1    2       22ms       20ms       20ms        0
+    exp_parallel_test.go:340:    8    2       22ms      160ms       90ms       14
+    exp_parallel_test.go:340:   32    2       23ms      640ms      330ms       62
+    exp_parallel_test.go:340:  128    2       29ms      2.56s      1.29s      254
+    exp_parallel_test.go:340:    1    4       42ms       40ms       40ms        0
+    exp_parallel_test.go:340:    8    4       43ms      320ms      110ms       28
+    exp_parallel_test.go:340:   32    4       50ms      1.28s      350ms      124
+    exp_parallel_test.go:340:  128    4       54ms      5.12s      1.31s      508
+--- PASS: TestExpCreateMatrix (0.36s)
+    exp_parallel_test.go:387: mode=none: plugin0 10ms on Create/Stop else 0; plugin1 1ms on all 9 events
+    exp_parallel_test.go:388:    N         up       down serial-model
+    exp_parallel_test.go:424:    8       19ms       18ms  120ms/112ms
+    exp_parallel_test.go:424:   32       21ms       24ms  480ms/448ms
+    exp_parallel_test.go:424:   64       33ms       26ms  960ms/896ms
+--- PASS: TestExpLifecycleBurst (0.15s)
+    exp_parallel_test.go:487: mode=none plugin exp0: saw 26 requests, 61 order inversions against answer order, overlap 25
+    exp_parallel_test.go:487: mode=none plugin exp1: saw 64 requests, 775 order inversions against answer order, overlap 61
+--- PASS: TestExpOrderInversions (0.01s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	0.559s
+### parallel=all
+    exp_parallel_test.go:326: mode=baseline, plugin delay 10ms per CreateContainer
+    exp_parallel_test.go:327:    N    P      total      N*P*d  (N+P-1)*d  overlap
+    exp_parallel_test.go:340:    1    1       11ms       10ms       10ms        0
+    exp_parallel_test.go:340:    8    1       11ms       80ms       80ms        7
+    exp_parallel_test.go:340:   32    1       16ms      320ms      320ms       31
+    exp_parallel_test.go:340:  128    1       15ms      1.28s      1.28s      127
+    exp_parallel_test.go:340:    1    2       21ms       20ms       20ms        0
+    exp_parallel_test.go:340:    8    2       21ms      160ms       90ms       14
+    exp_parallel_test.go:340:   32    2       23ms      640ms      330ms       62
+    exp_parallel_test.go:340:  128    2       32ms      2.56s      1.29s      254
+    exp_parallel_test.go:340:    1    4       41ms       40ms       40ms        0
+    exp_parallel_test.go:340:    8    4       46ms      320ms      110ms       28
+    exp_parallel_test.go:340:   32    4       46ms      1.28s      350ms      124
+    exp_parallel_test.go:340:  128    4       55ms      5.12s      1.31s      508
+--- PASS: TestExpCreateMatrix (0.37s)
+    exp_parallel_test.go:487: mode=baseline plugin exp0: saw 26 requests, 45 order inversions against answer order, overlap 25
+    exp_parallel_test.go:490: 
+        	Error Trace:	/home/akervine/github.com/containerd/nri-exp-main/pkg/adaptation/exp_parallel_test.go:490
+        	Error:      	Should be zero, but was 45
+        	Test:       	TestExpOrderInversions
+        	Messages:   	plugin exp0: answers applied in a different order than the plugin decided them
+--- FAIL: TestExpOrderInversions (0.01s)
+FAIL
+FAIL	github.com/containerd/nri/pkg/adaptation	0.414s
+FAIL
+### parallel=exp1 (adjuster-like plugin only)
+    exp_parallel_test.go:387: mode=baseline: plugin0 10ms on Create/Stop else 0; plugin1 1ms on all 9 events
+    exp_parallel_test.go:388:    N         up       down serial-model
+    exp_parallel_test.go:424:    8      119ms      117ms  120ms/112ms
+    exp_parallel_test.go:424:   32      469ms      461ms  480ms/448ms
+    exp_parallel_test.go:424:   64      941ms      921ms  960ms/896ms
+--- PASS: TestExpLifecycleBurst (3.04s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	3.069s
+### existing adaptation test suite on the prototype
+ok  	github.com/containerd/nri/pkg/adaptation	10.627s
+?   	github.com/containerd/nri/pkg/adaptation/builtin	[no test files]
+### DONE

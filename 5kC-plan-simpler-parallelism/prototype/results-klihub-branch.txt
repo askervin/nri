@@ -1,0 +1,65 @@
+go: downloading google.golang.org/grpc v1.65.1
+go: downloading google.golang.org/protobuf v1.34.1
+go: downloading golang.org/x/sys v0.39.0
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157
+=== RUN   TestScalabilityMatrix
+    scalability_test.go:576: plugin delay 10ms per request
+    scalability_test.go:577: event               N    P        total      slowest  per-request   vs N*P*d
+    scalability_test.go:581: CreateContainer     1    1         11ms         11ms         11ms       1.11
+    scalability_test.go:581: CreateContainer     8    1         83ms         83ms         10ms       1.04
+    scalability_test.go:581: CreateContainer    32    1        330ms        330ms         10ms       1.03
+    scalability_test.go:581: CreateContainer     1    2         21ms         21ms         21ms       1.06
+    scalability_test.go:581: CreateContainer     8    2         94ms         94ms         12ms       0.59
+    scalability_test.go:581: CreateContainer    32    2        345ms        345ms         11ms       0.54
+    scalability_test.go:581: CreateContainer     1    4         42ms         42ms         42ms       1.06
+    scalability_test.go:581: CreateContainer     8    4        116ms        116ms         14ms       0.36
+    scalability_test.go:581: CreateContainer    32    4        367ms        367ms         11ms       0.29
+    scalability_test.go:581: StopContainer       1    1         11ms         11ms         11ms       1.06
+    scalability_test.go:581: StopContainer       8    1         83ms         83ms         10ms       1.03
+    scalability_test.go:581: StopContainer      32    1        330ms        330ms         10ms       1.03
+    scalability_test.go:581: StopContainer       1    2         21ms         21ms         21ms       1.03
+    scalability_test.go:581: StopContainer       8    2         94ms         94ms         12ms       0.58
+    scalability_test.go:581: StopContainer      32    2        344ms        344ms         11ms       0.54
+    scalability_test.go:581: StopContainer       1    4         41ms         41ms         41ms       1.04
+    scalability_test.go:581: StopContainer       8    4        115ms        115ms         14ms       0.36
+    scalability_test.go:581: StopContainer      32    4        368ms        368ms         11ms       0.29
+--- PASS: TestScalabilityMatrix (2.88s)
+=== RUN   TestScalabilityOptInMatrix
+    scalability_test.go:655: plugin delay 10ms per request, CreateContainer, in-process plugins
+    scalability_test.go:656:    N    P      ordered     parallel    ratio  (N+P-1)/P   overlap
+    scalability_test.go:663:    1    1         11ms         10ms     1.02x       1.00         0
+    scalability_test.go:663:    8    1         83ms         11ms     7.71x       8.00         7
+    scalability_test.go:663:   32    1        330ms         12ms    27.35x      32.00        31
+    scalability_test.go:663:    1    2         21ms         21ms     1.01x       1.00         0
+    scalability_test.go:663:    8    2         94ms         26ms     3.66x       4.50        14
+    scalability_test.go:663:   32    2        345ms         23ms    14.86x      16.50        62
+    scalability_test.go:663:    1    4         42ms         42ms     1.00x       1.00         0
+    scalability_test.go:663:    8    4        116ms         43ms     2.70x       2.75        28
+    scalability_test.go:663:   32    4        367ms         51ms     7.25x       8.75       124
+--- PASS: TestScalabilityOptInMatrix (1.69s)
+=== RUN   TestScalabilityOptInBesideAnOrderedPlugin
+    scalability_test.go:721: plugin 0 takes the opt-in and costs dA; plugin 1 never does and costs dB
+    scalability_test.go:722:    N      dA      dB both ordered   0 parallel    ratio    max/dB
+    scalability_test.go:735:    8    10ms      0s         84ms         11ms     7.46x       inf   opting-in plugin dominates, co-resident free
+    scalability_test.go:735:    8    10ms     1ms         86ms         20ms     4.23x     10.00   opting-in plugin dominates, co-resident cheap
+    scalability_test.go:735:    8    10ms    10ms         94ms         93ms     1.01x      1.00   both cost the same
+    scalability_test.go:735:    8     1ms    10ms         84ms         84ms     1.00x      1.00   co-resident dominates, opting-in plugin cheap
+    scalability_test.go:735:   32    10ms      0s        337ms         13ms    26.63x       inf   opting-in plugin dominates, co-resident free
+    scalability_test.go:735:   32    10ms     1ms        341ms         49ms     6.90x     10.00   opting-in plugin dominates, co-resident cheap
+    scalability_test.go:735:   32    10ms    10ms        345ms        341ms     1.01x      1.00   both cost the same
+    scalability_test.go:735:   32     1ms    10ms        332ms        333ms     1.00x      1.00   co-resident dominates, opting-in plugin cheap
+--- PASS: TestScalabilityOptInBesideAnOrderedPlugin (2.69s)
+=== RUN   TestScalabilityPathological
+    scalability_test.go:815: 1 plugin, 100ms per request, 50 creations and 50 stops at once
+    scalability_test.go:817:   total        10.033s
+    scalability_test.go:818:   slowest      10.033s
+    scalability_test.go:819:   one at a time 10s (100 x 100ms)
+    scalability_test.go:820:   speedup      1.0x
+    scalability_test.go:821:   plugin saw   100 requests, 0 failed
+--- PASS: TestScalabilityPathological (10.03s)
+PASS
+ok  	github.com/containerd/nri/pkg/adaptation	17.326s
+
+real	0m30.848s
+user	1m5.544s
+sys	0m36.820s
