@@ -1,0 +1,94 @@
+The task is to do research for simpler alternatives to mitigate NRI
+performance hit due to forced event serialization.
+
+In https://github.com/containerd/nri, main branch, locking forces
+serial processing of events in the chain of NRI plugins. As a
+consequence, even if containerd alone could perform well with massive
+amount of parallel container lifecycle events (create, start, stop,
+delete, ...), when any NRI plugin has plugged to the runtime, heavy
+event bursts cause dramatic slow-down of processing of certain events.
+
+It should be noted that
+
+1. Not all lifecycle events communicated to plugins are equal. Plugins
+can change container runtime behavior and affect all containers in the
+system only on certain events. Therefore, it is possible that heavier
+locking would be necessary only when handling certain events rather
+than all of them. That said, it also may be possible that, at minimum
+a partial order of events needs to be retained. For instance (this is
+just guessing and an example) synchronous event of deleting container
+C1 should not be sent to plugin P1 unless asynchronous event of
+stopping C1 has been sent to P1. On the other hand, it might be
+possible that delete C1 could be sent to plugin P1 already before
+sending stop C1 to plugin P2, if there is nothing P2 could really do
+and C1 could be deleted anyway.
+
+2. Not all plugins are equal. There are plugins that definitely need,
+and on their own end, they serialize certain events anyway. For
+instance resource policy plugins (topology-aware, balloons, template)
+in github.com/containers/nri-plugins are such plugins. They must be
+able to allocate and free resources (CPUs, memory on different NUMA
+nodes) for containers. Allocations/frees definitely affect on
+allocations/frees that are possible for next containers, and may even
+affect CPUs and memories of running containers. On the other hand,
+some other NRI plugins (like memory-qos in NRI plugins) only change a
+small thing in OCI spec typically on container creation, and do that
+based on information that other plugins cannot affect (pod
+annotations, for instance). This kind of plugins could possibly be
+handled in an "independent" plugin pool where all event handling could
+be heavily parallelized. As no plugin in such pool could, for
+instance, prevent creating a container, and therefore "create
+container" event that is sent to all independent plugins in parallel,
+would not need invalidation ("we didn't create the container after
+all") afterwards.
+
+In the current nri branch
+(klihub/proto/nri-test+streaming-wire-protocol), Krisztian has
+experimented with changes that convert ttrpc communication between
+containerd and plugins into a streaming protocol. However, this causes
+a concern that this change could add too much "wire-level" complexity
+for the benefits that it gives. And on the other hand, the solution in
+this branch probably does not result in the level of parallelism that
+would be safely achievable, given that NRI would know what plugins can
+or cannot do on the events they have registered into. (For instance,
+if two plugins would register themselves to CreateContainer event with
+promises "never fail" and/or "independent", then those could be ran in
+parallel.)
+
+Note that ideas thrown here (such as event-related promises of plugins
+and NRI promises of only a partial order event processing) are just
+quick examples of what kind of extra information and principles could
+help mitigating NRI as a bottleneck on container event bursts (like
+create 100 containers simultaneously).
+
+Your task is to study carefully NRI (branch origin/main) and currently
+checked out Krisztian's branch with performance tests and containerd
+(~/github.com/containerd/containerd). Come up with different options
+for increasing parallelism, some of which may be alternatives, some of
+which may be applied together. You run small experiments in
+~/github.com/containerd/nri to inspect potential benefits of different
+options. Also pay attention on how simple implementations (hopefully
+simpler than current streaming protocol implementation) would be
+possible for each of the options that look viable. Simplicity and
+clarity are important for getting these critical optimizations
+accepted in the upstream.
+
+Any parts of current Krisztian's branch can be taken advantage of in
+testing and benchmarking viable ideas/options/designs. On the other
+hand, when giving recommendations and planning, improved parallelism
+implementation could be implemented on top of origin/main in the end
+(possibly with benchmarking etc. included from Krisztian's branch. And
+even the streaming implementation, if it is absolutely
+necessary. Simplicity is important in this plan.)
+
+Write the results of this research under the
+~/github.com/containerd/nri/5kC-plan-simpler-parallelism/
+directory. The directory should contain files
+00-readme.md - an overview of directory contents
+01-findings.md - facts relevant for NRI plugin parallelism
+02-options.md - summary of all options to be studied in detail
+03-design-TITLE.md - one design/reasons/decisions file per option that
+                     turned out to be worth a closer design and
+		     experimentation. Reasons may include benchmark results.
+04-plan.md - recommendation of which options/designs should
+             be implemented and a plan to carry out the implementation.
